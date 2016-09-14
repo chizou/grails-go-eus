@@ -5,27 +5,45 @@ import (
 	"fmt"
 	"io/ioutil"
 	"math/rand"
+	"net"
 	"net/http"
 	"time"
 )
 
 func myIPWithTimeout() string {
-        timeout := time.Duration(3 * time.Second)
-        client := http.Client{
-                Timeout: timeout,
-        }
-        resp, err := client.Get("http://169.254.169.254/latest/meta-data/public-ipv4")
-        if err != nil {
-                fmt.Println("Something went wrong in myIPWithTimeout")
-        }
-        defer resp.Body.Close()
-        body, err := ioutil.ReadAll(resp.Body)
-        return string(body)
+	timeout := time.Duration(3 * time.Second)
+	client := http.Client{
+		Timeout: timeout,
+	}
+	resp, err := client.Get("http://169.254.169.254/latest/meta-data/public-ipv4")
+	if err != nil {
+		fmt.Println("Something went wrong in myIPWithTimeout")
+	}
+	defer resp.Body.Close()
+	body, err := ioutil.ReadAll(resp.Body)
+	return string(body)
+}
+
+// getLocalIP returns the non loopback local IP of the host
+func getLocalIP() string {
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return ""
+	}
+	for _, address := range addrs {
+		// check the address type and if it is not a loopback the display it
+		if ipnet, ok := address.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
+			if ipnet.IP.To4() != nil {
+				return ipnet.IP.String()
+			}
+		}
+	}
+	return ""
 }
 
 func simulatedExternalUserService(w http.ResponseWriter, r *http.Request) {
 	t := simulateComputation()
-	ip := myIPWithTimeout()
+	ip := getLocalIP()
 	writeReturnedJSON(w, t, ip)
 }
 
@@ -53,11 +71,10 @@ func writeReturnedJSON(w http.ResponseWriter, t int, ip string) {
 }
 
 func main() {
-        mux := http.NewServeMux()
-//        mux.HandleFunc("/", home)
-//        mux.HandleFunc("/work", work)
-//        mux.HandleFunc("/status", status)
-        mux.HandleFunc("/external", simulatedExternalUserService)
-        http.ListenAndServe(":8077", mux)
+	mux := http.NewServeMux()
+	//        mux.HandleFunc("/", home)
+	//        mux.HandleFunc("/work", work)
+	//        mux.HandleFunc("/status", status)
+	mux.HandleFunc("/external", simulatedExternalUserService)
+	http.ListenAndServe(":8077", mux)
 }
-
